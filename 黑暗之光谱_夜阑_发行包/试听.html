@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>黑暗之光谱 · 试听</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #05070b; color: #e8f0f6;
+    font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: grid; place-items: center; padding: 32px;
+  }
+  .wrap {
+    width: min(980px, 100%); display: grid; grid-template-columns: 300px 1fr;
+    gap: 36px; align-items: center;
+    background: linear-gradient(160deg, #0a0f16, #070a10);
+    border: 1px solid #16202b; border-radius: 18px; padding: 28px;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  }
+  .cover { width: 100%; border-radius: 12px; display: block; }
+  h1 { margin: 0 0 8px; font-size: 34px; letter-spacing: 6px; font-weight: 600; }
+  .meta { margin: 0 0 26px; color: #8fa6b8; font-size: 13px; letter-spacing: 2px; }
+  .track { margin-bottom: 22px; }
+  .track h2 { margin: 0 0 8px; font-size: 14px; font-weight: 500; color: #b9cbd9; letter-spacing: 1px; }
+  .track .tag { color: #6f8ea3; font-size: 12px; margin-left: 8px; }
+  audio { width: 100%; height: 40px; filter: invert(.9) hue-rotate(180deg); border-radius: 8px; }
+  .note { margin-top: 6px; color: #5f7486; font-size: 12px; line-height: 1.8; }
+  @media (max-width: 760px) {
+    .wrap { grid-template-columns: 1fr; gap: 20px; padding: 18px; }
+    .cover { max-width: 220px; margin: 0 auto; }
+    h1 { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <img class="cover" src="03_封面/黑暗之光谱_封面_夜阑.jpg" alt="黑暗之光谱 封面">
+    <main>
+      <h1>黑暗之光谱</h1>
+      <p class="meta">夜阑 · 4:06 · 暗黑电子 / 氛围流行 · AI 生成</p>
+
+      <div class="track">
+        <h2>成品版<span class="tag">已做响度统一与副歌增强</span></h2>
+        <audio controls preload="metadata" src="01_音频/黑暗之光谱_夜阑_成品_320k.mp3"></audio>
+      </div>
+
+      <div class="track">
+        <h2>版本一<span class="tag">未后期原始版</span></h2>
+        <audio controls preload="metadata" src="01_音频/黑暗之光谱_夜阑_版本一_320k.mp3"></audio>
+      </div>
+
+      <div class="track">
+        <h2>版本二<span class="tag">另一版编曲</span></h2>
+        <audio controls preload="metadata" src="01_音频/黑暗之光谱_夜阑_版本二_320k.mp3"></audio>
+      </div>
+
+      <p class="note">若页面内无法播放，请直接打开 01_音频 文件夹里的 mp3 文件。上传平台时请勾选「AI 生成内容」标识。</p>
+    </main>
+  </div>
+</body>
+</html>
