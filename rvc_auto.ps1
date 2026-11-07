@@ -126,8 +126,12 @@ Say "[OK] venv: $(& $venvPy --version)" Green
 
 & $venvPy -c "import torch" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Say "[3/6] Installing torch cu128 (3.4GB, 10-20 min) ..." Yellow
-    & $venvPy -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+    Say "[3/6] Installing torch cu128 (3.5GB, ~6 min on Aliyun mirror) ..." Yellow
+    & $venvPy -m pip install "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" --find-links https://mirrors.aliyun.com/pytorch-wheels/cu128 -i https://pypi.tuna.tsinghua.edu.cn/simple
+    if ($LASTEXITCODE -ne 0) {
+        Say "[WARN] Aliyun mirror failed, trying official source (slow) ..." Yellow
+        & $venvPy -m pip install "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cu128
+    }
     if ($LASTEXITCODE -ne 0) { Say "[ERROR] torch install failed - send the red text above." Red; Read-Host "Enter to exit"; exit 1 }
 } else { Say "[3/6] torch already present" Green }
 
