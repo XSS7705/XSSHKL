@@ -179,6 +179,94 @@ except Exception:
 '@ | Set-Content -Path $sc -Encoding ASCII
 Say "[OK] HF mirror + module path configured" Green
 
+# ---------- 4.6 fetch required model assets (parallel) ----------
+$dlm = Join-Path $workdir "dlm.py"
+@'
+import sys, os, threading, urllib.request
+
+url, out, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+
+def head(u):
+    r = urllib.request.urlopen(urllib.request.Request(u, method="HEAD"), timeout=30)
+    return int(r.headers.get("Content-Length") or 0)
+
+def stream(u, o):
+    with urllib.request.urlopen(u, timeout=60) as r, open(o, "wb") as f:
+        while True:
+            c = r.read(1 << 20)
+            if not c:
+                break
+            f.write(c)
+
+def part(u, a, b, o):
+    req = urllib.request.Request(u, headers={"Range": "bytes=%d-%d" % (a, b)})
+    r = urllib.request.urlopen(req, timeout=120)
+    if getattr(r, "status", 200) != 206:
+        raise RuntimeError("no-range")
+    with open(o, "wb") as f:
+        while True:
+            c = r.read(1 << 20)
+            if not c:
+                break
+            f.write(c)
+
+total = head(url)
+if total <= 0 or total < 4 * 1024 * 1024:
+    stream(url, out)
+    sys.exit(0)
+
+step = total // n
+parts, ts = [], []
+ok = True
+try:
+    for i in range(n):
+        a = i * step
+        b = total - 1 if i == n - 1 else a + step - 1
+        p = "%s.p%d" % (out, i)
+        parts.append(p)
+        t = threading.Thread(target=part, args=(url, a, b, p))
+        t.start()
+        ts.append(t)
+    for t in ts:
+        t.join()
+    if sum(os.path.getsize(p) for p in parts) != total:
+        ok = False
+    else:
+        with open(out, "wb") as fo:
+            for p in parts:
+                with open(p, "rb") as fi:
+                    while True:
+                        c = fi.read(1 << 22)
+                        if not c:
+                            break
+                        fo.write(c)
+finally:
+    for p in parts:
+        try:
+            os.remove(p)
+        except Exception:
+            pass
+if not ok or not os.path.exists(out):
+    stream(url, out)
+'@ | Set-Content -Path $dlm -Encoding ASCII
+
+$base = "https://hf-mirror.com/IAHispano/Applio/resolve/main/Resources"
+$assets = @(
+    @{ u = "$base/predictors/rmvpe.pt";                    d = "rvc\models\predictors\rmvpe.pt" },
+    @{ u = "$base/embedders/contentvec/pytorch_model.bin"; d = "rvc\models\embedders\contentvec\pytorch_model.bin" },
+    @{ u = "$base/embedders/contentvec/config.json";       d = "rvc\models\embedders\contentvec\config.json" }
+)
+foreach ($as in $assets) {
+    $out = Join-Path $appDir $as.d
+    $parent = Split-Path $out
+    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    if ((Test-Path $out) -and ((Get-Item $out).Length -gt 100KB)) { continue }
+    Say ("  downloading: " + (Split-Path $out -Leaf)) Gray
+    & $venvPy $dlm $as.u $out 8
+    if (-not (Test-Path $out)) { Say ("[ERROR] failed to fetch " + $as.d) Red; Read-Host "Enter to exit"; exit 1 }
+}
+Say "[OK] pitch + embedder models ready" Green
+
 # ---------- 5. train (skipped if the model already exists) ----------
 $logsDir = Join-Path $appDir "logs\yelan"
 $weightsDir = Join-Path $appDir "assets\weights"
