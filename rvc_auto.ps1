@@ -152,24 +152,39 @@ if ($LASTEXITCODE -ne 0) {
 Say ""; & $venvPy -c "import torch; print('  GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else '!!! NO GPU !!!')"; Say ""
 
 # ---------- 5. train (skipped if the model already exists) ----------
-$pth = Join-Path $appDir "logs\yelan\yelan.pth"
-if (Test-Path $pth) {
+$logsDir = Join-Path $appDir "logs\yelan"
+$weightsDir = Join-Path $appDir "assets\weights"
+
+function Get-BestPth {
+    $cand = @()
+    if (Test-Path $logsDir) { $cand += Get-ChildItem $logsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
+    if (Test-Path $weightsDir) { $cand += Get-ChildItem $weightsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
+    $cand = @($cand | Where-Object { $_.Name -notmatch '^(G_|D_)' })
+    if ($cand.Count -eq 0) { return $null }
+    return ($cand | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+}
+
+$pth = Get-BestPth
+if ($pth) {
     Say "[5/6] Model already exists - skipping training" Green
 } else {
 Say "[4/6] Preprocess ..." Yellow
-& $venvPy $core preprocess --model-name yelan --dataset-path $dirRaw --sample-rate 40000 --cpu-cores 8 --cut-preprocess Automatic --process-effects true
+& $venvPy $core preprocess --model-name yelan --dataset-path $dirRaw --sample-rate 40000 --cpu-cores 8 --cut-preprocess Automatic
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] preprocess failed." Red; Read-Host "Enter to exit"; exit 1 }
 
 Say "[4/6] Extract features ..." Yellow
-& $venvPy $core extract --model-name yelan --rvc-version v2 --f0method rmvpe --hop-length 128 --cpu-cores 8 --gpu 0 --sample-rate 40000 --embedder-model contentvec
+& $venvPy $core extract --model-name yelan --f0-method rmvpe --cpu-cores 8 --gpu 0 --sample-rate 40000 --embedder-model contentvec
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] extract failed." Red; Read-Host "Enter to exit"; exit 1 }
 
 Say "[5/6] Training 200 epochs (1.5-3 hours). You can leave ..." Yellow
-& $venvPy $core train --model-name yelan --rvc-version v2 --save-every-epoch 20 --total-epoch 200 --sample-rate 40000 --batch-size 8 --gpu 0 --pitch-guidance true --save-every-weights true
+& $venvPy $core train --model-name yelan --save-every-epoch 20 --total-epoch 200 --sample-rate 40000 --batch-size 8 --gpu 0 --pretrained --save-every-weights
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] train failed." Red; Read-Host "Enter to exit"; exit 1 }
 
-& $venvPy $core index --model-name yelan --rvc-version v2
-if (-not (Test-Path $pth)) { Say "[ERROR] Model not produced: $pth" Red; Read-Host "Enter to exit"; exit 1 }
+Say "[5/6] Building index ..." Yellow
+& $venvPy $core index --model-name yelan --index-algorithm Auto
+
+$pth = Get-BestPth
+if (-not $pth) { Say "[ERROR] Model not produced under logs\yelan or assets\weights." Red; Read-Host "Enter to exit"; exit 1 }
 }
 Say "[OK] Model: $pth" Green
 
@@ -184,12 +199,22 @@ Say "[6/6] Converting AI vocal to your voice ..." Yellow
 $aiVocalWav = Join-Path $dirIn "ai_vocal.wav"
 & $ff -y -loglevel error -i $vocalIn.FullName -ac 1 -ar 40000 $aiVocalWav
 $outVocal = Join-Path $dirOut "converted_vocal.wav"
-$idx = Get-ChildItem (Split-Path $pth) -Filter "added_*.index" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+$idx = Get-ChildItem (Split-Path $pth) -Filter "*.index" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+if (-not $idx -and (Test-Path $logsDir)) {
+    $idx = Get-ChildItem $logsDir -Filter "*.index" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $idx) {
+    Say "[6/6] Index missing - rebuilding ..." Yellow
+    & $venvPy $core index --model-name yelan --index-algorithm Auto
+    if (Test-Path $logsDir) { $idx = Get-ChildItem $logsDir -Filter "*.index" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName }
+}
+if (-not $idx) { Say "[ERROR] No .index file found - cannot run inference." Red; Read-Host "Enter to exit"; exit 1 }
+
 $env:HF_ENDPOINT = "https://hf-mirror.com"
-$a = @($core, "infer", "--pitch", "0", "--input-path", $aiVocalWav, "--output-path", $outVocal,
-       "--pth-path", $pth, "--index-rate", "0.7", "--filter-radius", "3",
-       "--rms-mix-rate", "0.25", "--protect", "0.33", "--f0method", "rmvpe", "--hop-length", "128")
-if ($idx) { $a += @("--index-path", $idx) }
+$a = @($core, "infer", "--input-path", $aiVocalWav, "--output-path", $outVocal,
+       "--pth-path", $pth, "--index-path", $idx,
+       "--pitch", "0", "--index-rate", "0.7", "--volume-envelope", "0.25",
+       "--protect", "0.33", "--f0-method", "rmvpe", "--export-format", "WAV")
 & $venvPy @a
 if (-not (Test-Path $outVocal)) { Say "[ERROR] inference failed - send the red text above." Red; Read-Host "Enter to exit"; exit 1 }
 
