@@ -20,6 +20,7 @@ $searchDirs = @($dl, $desk, $music, $docs) | Where-Object { Test-Path $_ }
 
 $workdir = $null
 Get-ChildItem $desk -Directory -Filter "RVC*" -ErrorAction SilentlyContinue | ForEach-Object { $workdir = $_.FullName }
+if (-not $workdir -and (Test-Path (Join-Path $env:USERPROFILE "RVC\Applio\core.py"))) { $workdir = Join-Path $env:USERPROFILE "RVC" }
 if (-not $workdir) {
     Say "[ERROR] No folder starting with 'RVC' on Desktop." Red
     Read-Host "Press Enter to exit"; exit 1
@@ -31,6 +32,32 @@ if (-not (Test-Path $core)) {
     Read-Host "Press Enter to exit"; exit 1
 }
 Say "[OK] Workdir: $workdir" Green
+
+# ---------- 0.5 migrate to a pure-ASCII path (Chinese paths break ApplIO) ----------
+$pureAscii = $true
+foreach ($ch in $workdir.ToCharArray()) { if ([int]$ch -gt 127) { $pureAscii = $false; break } }
+if (-not $pureAscii) {
+    $target = Join-Path $env:USERPROFILE "RVC"
+    Say "[..] Non-ASCII path detected - migrating to $target ..." Yellow
+    Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep 2
+    if (Test-Path $target) { Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue }
+    try {
+        Move-Item $workdir $target -Force -ErrorAction Stop
+    } catch {
+        Say "[..] Rename blocked, copying instead (a few minutes) ..." Yellow
+        Copy-Item $workdir $target -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $workdir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if (-not (Test-Path (Join-Path $target "Applio\core.py"))) {
+        Say "[ERROR] Migration failed. Please rename the Desktop folder to 'RVC' manually." Red
+        Read-Host "Press Enter to exit"; exit 1
+    }
+    $workdir = $target
+    $appDir  = Join-Path $workdir "Applio"
+    $core    = Join-Path $appDir "core.py"
+    Say "[OK] Migrated: $workdir" Green
+}
 
 $dirRec   = Join-Path $workdir "recordings"
 $dirRaw   = Join-Path $workdir "datasets\yelan_raw"
