@@ -151,6 +151,34 @@ if ($LASTEXITCODE -ne 0) {
 
 Say ""; & $venvPy -c "import torch; print('  GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else '!!! NO GPU !!!')"; Say ""
 
+# ---------- 4.5 fix module path + HF mirror ----------
+$env:HF_ENDPOINT = "https://hf-mirror.com"
+$env:PYTHONPATH = $appDir
+Set-Location $appDir
+
+$sc = Join-Path $workdir "env\Lib\site-packages\sitecustomize.py"
+@'
+import os, sys
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+try:
+    import requests
+    _orig_req = requests.Session.request
+    def _patched(self, method, url, *a, **kw):
+        if isinstance(url, str) and "huggingface.co" in url:
+            url = url.replace("huggingface.co", "hf-mirror.com")
+        return _orig_req(self, method, url, *a, **kw)
+    requests.Session.request = _patched
+except Exception:
+    pass
+try:
+    import huggingface_hub.constants as _c
+    if hasattr(_c, "ENDPOINT"):
+        _c.ENDPOINT = "https://hf-mirror.com"
+except Exception:
+    pass
+'@ | Set-Content -Path $sc -Encoding ASCII
+Say "[OK] HF mirror + module path configured" Green
+
 # ---------- 5. train (skipped if the model already exists) ----------
 $logsDir = Join-Path $appDir "logs\yelan"
 $weightsDir = Join-Path $appDir "assets\weights"
