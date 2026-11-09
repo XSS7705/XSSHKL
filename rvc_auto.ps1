@@ -157,18 +157,18 @@ if (Test-Path $pth) {
     Say "[5/6] Model already exists - skipping training" Green
 } else {
 Say "[4/6] Preprocess ..." Yellow
-& $venvPy $core preprocess --model_name yelan --dataset_path $dirRaw --sample_rate 40000 --cpu_cores 8 --cut_preprocess true --process_effects true
+& $venvPy $core preprocess --model-name yelan --dataset-path $dirRaw --sample-rate 40000 --cpu-cores 8 --cut-preprocess true --process-effects true
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] preprocess failed." Red; Read-Host "Enter to exit"; exit 1 }
 
 Say "[4/6] Extract features ..." Yellow
-& $venvPy $core extract --model_name yelan --rvc_version v2 --f0method rmvpe --hop_length 128 --cpu_cores 8 --gpu 0 --sample_rate 40000 --embedder_model contentvec
+& $venvPy $core extract --model-name yelan --rvc-version v2 --f0method rmvpe --hop-length 128 --cpu-cores 8 --gpu 0 --sample-rate 40000 --embedder-model contentvec
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] extract failed." Red; Read-Host "Enter to exit"; exit 1 }
 
 Say "[5/6] Training 200 epochs (1.5-3 hours). You can leave ..." Yellow
-& $venvPy $core train --model_name yelan --rvc_version v2 --save_every_epoch 20 --total_epoch 200 --sample_rate 40000 --batch_size 8 --gpu 0 --pitch_guidance true --save_every_weights true
+& $venvPy $core train --model-name yelan --rvc-version v2 --save-every-epoch 20 --total-epoch 200 --sample-rate 40000 --batch-size 8 --gpu 0 --pitch-guidance true --save-every-weights true
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] train failed." Red; Read-Host "Enter to exit"; exit 1 }
 
-& $venvPy $core index --model_name yelan --rvc_version v2
+& $venvPy $core index --model-name yelan --rvc-version v2
 if (-not (Test-Path $pth)) { Say "[ERROR] Model not produced: $pth" Red; Read-Host "Enter to exit"; exit 1 }
 }
 Say "[OK] Model: $pth" Green
@@ -186,10 +186,10 @@ $aiVocalWav = Join-Path $dirIn "ai_vocal.wav"
 $outVocal = Join-Path $dirOut "converted_vocal.wav"
 $idx = Get-ChildItem (Split-Path $pth) -Filter "added_*.index" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 $env:HF_ENDPOINT = "https://hf-mirror.com"
-$a = @($core, "infer", "--pitch", "0", "--input_path", $aiVocalWav, "--output_path", $outVocal,
-       "--pth_path", $pth, "--index_rate", "0.7", "--filter_radius", "3",
-       "--rms_mix_rate", "0.25", "--protect", "0.33", "--f0method", "rmvpe", "--hop_length", "128")
-if ($idx) { $a += @("--index_path", $idx) }
+$a = @($core, "infer", "--pitch", "0", "--input-path", $aiVocalWav, "--output-path", $outVocal,
+       "--pth-path", $pth, "--index-rate", "0.7", "--filter-radius", "3",
+       "--rms-mix-rate", "0.25", "--protect", "0.33", "--f0method", "rmvpe", "--hop-length", "128")
+if ($idx) { $a += @("--index-path", $idx) }
 & $venvPy @a
 if (-not (Test-Path $outVocal)) { Say "[ERROR] inference failed - send the red text above." Red; Read-Host "Enter to exit"; exit 1 }
 
