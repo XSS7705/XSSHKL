@@ -280,19 +280,19 @@ if total > 0 and got != total:
 
 $base = "https://hf-mirror.com/IAHispano/Applio/resolve/main/Resources"
 $assets = @(
-    @{ u = "$base/predictors/rmvpe.pt";                    d = "rvc\models\predictors\rmvpe.pt" },
-    @{ u = "$base/embedders/contentvec/pytorch_model.bin"; d = "rvc\models\embedders\contentvec\pytorch_model.bin" },
-    @{ u = "$base/embedders/contentvec/config.json";       d = "rvc\models\embedders\contentvec\config.json" }
+    @{ u = "$base/predictors/rmvpe.pt";                    d = "rvc\models\predictors\rmvpe.pt";                    m = 50MB },
+    @{ u = "$base/embedders/contentvec/pytorch_model.bin"; d = "rvc\models\embedders\contentvec\pytorch_model.bin"; m = 50MB },
+    @{ u = "$base/embedders/contentvec/config.json";       d = "rvc\models\embedders\contentvec\config.json";       m = 200 }
 )
 foreach ($as in $assets) {
     $out = Join-Path $appDir $as.d
     $parent = Split-Path $out
     if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
-    if ((Test-Path $out) -and ((Get-Item $out).Length -gt 100KB)) { continue }
+    if ((Test-Path $out) -and ((Get-Item $out).Length -ge $as.m)) { continue }
     if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
     Say ("  downloading: " + (Split-Path $out -Leaf)) Gray
     & $venvPy $dlm $as.u $out 8
-    if (-not (Test-Path $out) -or ((Get-Item $out).Length -lt 100KB)) {
+    if (-not (Test-Path $out) -or ((Get-Item $out).Length -lt $as.m)) {
         Say ("[ERROR] failed to fetch " + $as.d) Red
         Read-Host "Enter to exit"; exit 1
     }
