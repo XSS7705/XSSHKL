@@ -126,10 +126,17 @@ Say "[OK] venv: $(& $venvPy --version)" Green
 
 & $venvPy -c "import torch" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Say "[3/6] Installing torch cu128 (3.5GB, ~6 min on Aliyun mirror) ..." Yellow
-    & $venvPy -m pip install "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" --find-links https://mirrors.aliyun.com/pytorch-wheels/cu128 -i https://pypi.tuna.tsinghua.edu.cn/simple
+    $whTorch = Get-ChildItem $dl -Filter "torch-*cu128*cp312*win_amd64.whl" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $whAudio = Get-ChildItem $dl -Filter "torchaudio-*cu128*cp312*win_amd64.whl" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($whTorch -and $whAudio) {
+        Say "[3/6] Installing torch from downloaded wheels (offline) ..." Yellow
+        & $venvPy -m pip install $whTorch.FullName $whAudio.FullName -i https://pypi.tuna.tsinghua.edu.cn/simple
+    } else {
+        Say "[3/6] Installing torch cu128 (3.5GB, ~6 min on Aliyun mirror) ..." Yellow
+        & $venvPy -m pip install "torch==2.8.0+cu128" "torchaudio==2.8.0+cu128" --find-links https://mirrors.aliyun.com/pytorch-wheels/cu128 -i https://pypi.tuna.tsinghua.edu.cn/simple
+    }
     if ($LASTEXITCODE -ne 0) {
-        Say "[WARN] Aliyun mirror failed, trying official source (slow) ..." Yellow
+        Say "[WARN] Mirror failed, trying official source (slow) ..." Yellow
         & $venvPy -m pip install "torch==2.8.0" "torchaudio==2.8.0" --index-url https://download.pytorch.org/whl/cu128
     }
     if ($LASTEXITCODE -ne 0) { Say "[ERROR] torch install failed - send the red text above." Red; Read-Host "Enter to exit"; exit 1 }
