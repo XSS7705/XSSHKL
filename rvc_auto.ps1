@@ -182,16 +182,36 @@ Say "[OK] HF mirror + module path configured" Green
 # ---------- 4.6 fetch required model assets (parallel) ----------
 $dlm = Join-Path $workdir "dlm.py"
 @'
-import sys, os, threading, urllib.request
+import sys, os, time, threading, urllib.request, urllib.error
 
 url, out, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
 
+def _open(req, tries=6):
+    last = None
+    for i in range(tries):
+        try:
+            return urllib.request.urlopen(req, timeout=180)
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (429, 500, 502, 503, 504) and i < tries - 1:
+                time.sleep(3 * (i + 1))
+                continue
+            raise
+        except Exception as e:
+            last = e
+            if i < tries - 1:
+                time.sleep(3 * (i + 1))
+                continue
+            raise
+    raise last
+
 def head(u):
-    r = urllib.request.urlopen(urllib.request.Request(u, method="HEAD"), timeout=30)
+    r = _open(urllib.request.Request(u, method="HEAD"))
     return int(r.headers.get("Content-Length") or 0)
 
 def stream(u, o):
-    with urllib.request.urlopen(u, timeout=60) as r, open(o, "wb") as f:
+    r = _open(u)
+    with open(o, "wb") as f:
         while True:
             c = r.read(1 << 20)
             if not c:
@@ -200,7 +220,7 @@ def stream(u, o):
 
 def part(u, a, b, o):
     req = urllib.request.Request(u, headers={"Range": "bytes=%d-%d" % (a, b)})
-    r = urllib.request.urlopen(req, timeout=120)
+    r = _open(req)
     if getattr(r, "status", 200) != 206:
         raise RuntimeError("no-range")
     with open(o, "wb") as f:
@@ -246,8 +266,13 @@ finally:
             os.remove(p)
         except Exception:
             pass
-if not ok or not os.path.exists(out):
+if not ok:
     stream(url, out)
+
+got = os.path.getsize(out) if os.path.exists(out) else 0
+if total > 0 and got != total:
+    print("[ERROR] size mismatch %d != %d" % (got, total))
+    sys.exit(2)
 '@ | Set-Content -Path $dlm -Encoding ASCII
 
 $base = "https://hf-mirror.com/IAHispano/Applio/resolve/main/Resources"
@@ -261,9 +286,13 @@ foreach ($as in $assets) {
     $parent = Split-Path $out
     if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
     if ((Test-Path $out) -and ((Get-Item $out).Length -gt 100KB)) { continue }
+    if (Test-Path $out) { Remove-Item $out -Force -ErrorAction SilentlyContinue }
     Say ("  downloading: " + (Split-Path $out -Leaf)) Gray
     & $venvPy $dlm $as.u $out 8
-    if (-not (Test-Path $out)) { Say ("[ERROR] failed to fetch " + $as.d) Red; Read-Host "Enter to exit"; exit 1 }
+    if (-not (Test-Path $out) -or ((Get-Item $out).Length -lt 100KB)) {
+        Say ("[ERROR] failed to fetch " + $as.d) Red
+        Read-Host "Enter to exit"; exit 1
+    }
 }
 Say "[OK] pitch + embedder models ready" Green
 
