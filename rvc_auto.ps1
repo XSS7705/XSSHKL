@@ -157,7 +157,7 @@ if (Test-Path $pth) {
     Say "[5/6] Model already exists - skipping training" Green
 } else {
 Say "[4/6] Preprocess ..." Yellow
-& $venvPy $core preprocess --model-name yelan --dataset-path $dirRaw --sample-rate 40000 --cpu-cores 8 --cut-preprocess true --process-effects true
+& $venvPy $core preprocess --model-name yelan --dataset-path $dirRaw --sample-rate 40000 --cpu-cores 8 --cut-preprocess Automatic --process-effects true
 if ($LASTEXITCODE -ne 0) { Say "[ERROR] preprocess failed." Red; Read-Host "Enter to exit"; exit 1 }
 
 Say "[4/6] Extract features ..." Yellow
