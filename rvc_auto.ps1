@@ -185,6 +185,7 @@ $dlm = Join-Path $workdir "dlm.py"
 import sys, os, time, threading, urllib.request, urllib.error
 
 url, out, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+HDR = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 def _open(req, tries=6):
     last = None
@@ -206,11 +207,11 @@ def _open(req, tries=6):
     raise last
 
 def head(u):
-    r = _open(urllib.request.Request(u, method="HEAD"))
+    r = _open(urllib.request.Request(u, headers=HDR, method="HEAD"))
     return int(r.headers.get("Content-Length") or 0)
 
 def stream(u, o):
-    r = _open(u)
+    r = _open(urllib.request.Request(u, headers=HDR))
     with open(o, "wb") as f:
         while True:
             c = r.read(1 << 20)
@@ -219,7 +220,9 @@ def stream(u, o):
             f.write(c)
 
 def part(u, a, b, o):
-    req = urllib.request.Request(u, headers={"Range": "bytes=%d-%d" % (a, b)})
+    h = dict(HDR)
+    h["Range"] = "bytes=%d-%d" % (a, b)
+    req = urllib.request.Request(u, headers=h)
     r = _open(req)
     if getattr(r, "status", 200) != 206:
         raise RuntimeError("no-range")
