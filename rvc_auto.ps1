@@ -113,6 +113,8 @@ foreach ($d in $searchDirs) {
 
 $vocalIn = $allAudio | Where-Object { $_.Name -match "^vocal_input" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $instrIn = $allAudio | Where-Object { $_.Name -match "^instrumental" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$pitchShift = 0
+if ($vocalIn -and $vocalIn.Name -match "_p(-?\d+)") { $pitchShift = [int]$Matches[1] }
 
 # --- training data: prefer phone recordings (.aac/.m4a), never the AI song mp3 ---
 $cand = $allAudio | Where-Object { $_.Name -notmatch "^(vocal_input|instrumental)" }
@@ -406,7 +408,7 @@ if (-not $idx) { Say "[ERROR] No .index file found - cannot run inference." Red;
 $env:HF_ENDPOINT = "https://hf-mirror.com"
 $a = @($core, "infer", "--input-path", $aiVocalWav, "--output-path", $outVocal,
        "--pth-path", $pth, "--index-path", $idx,
-       "--pitch", "0", "--index-rate", "0.7", "--volume-envelope", "0.25",
+       "--pitch", "$pitchShift", "--index-rate", "0.7", "--volume-envelope", "0.25",
        "--protect", "0.33", "--f0-method", "rmvpe", "--export-format", "WAV")
 & $venvPy @a
 if (-not (Test-Path $outVocal)) { Say "[ERROR] inference failed - send the red text above." Red; Read-Host "Enter to exit"; exit 1 }
