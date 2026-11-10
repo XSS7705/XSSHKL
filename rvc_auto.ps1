@@ -395,11 +395,21 @@ if (-not (Test-Path $outVocal)) { Say "[ERROR] inference failed - send the red t
 
 # mix
 $finalMp3 = Join-Path $dirFinal "final_yelan.mp3"
-Say "[MIX] Building final track ..." Yellow
+Say "[MIX] Building final track (studio chain) ..." Yellow
 if ($instrIn) {
-    & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex "[1:a]volume=1.0[bg];[0:a]volume=1.0[v];[v][bg]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.97,loudnorm=I=-14:TP=-1.5:LRA=11" -ar 44100 -b:a 320k $finalMp3
+    $fc = "[0:a]highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9[v0];" +
+          "[v0]asplit=2[v][vk];" +
+          "[1:a]volume=0.80,extrastereo=m=1.15[bg0];" +
+          "[bg0][vk]sidechaincompress=threshold=0.05:ratio=2.2:attack=6:release=220[bg];" +
+          "[v]aecho=0.9:0.9:35:0.08[vf];" +
+          "[vf][bg]amix=inputs=2:duration=longest:normalize=0,equalizer=f=60:t=q:w=1:g=1.5,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9,aresample=44100[out]"
+    & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex $fc -map "[out]" -b:a 320k $finalMp3
+    if (-not (Test-Path $finalMp3)) {
+        Say "[MIX] Advanced filters unavailable - fallback mix ..." Yellow
+        & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex "[0:a]volume=1.3,highpass=f=85,acompressor=threshold=0.09:ratio=3:attack=8:release=160[v];[1:a]volume=0.78[bg];[v][bg]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9" -ar 44100 -b:a 320k $finalMp3
+    }
 } else {
-    & $ff -y -loglevel error -i $outVocal -filter_complex "alimiter=limit=0.97,loudnorm=I=-14:TP=-1.5:LRA=11" -ar 44100 -b:a 320k $finalMp3
+    & $ff -y -loglevel error -i $outVocal -filter_complex "[0:a]highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9,aecho=0.9:0.9:35:0.08,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9,aresample=44100" -b:a 320k $finalMp3
 }
 
 Head "ALL DONE"
