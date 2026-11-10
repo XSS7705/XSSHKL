@@ -10,7 +10,7 @@ function Say($m, $c = "White") { Write-Host $m -ForegroundColor $c }
 function Head($m) { Say ""; Say "================================================" Cyan; Say "  $m" Cyan; Say "================================================" Cyan }
 
 Head "RVC FULL AUTO  (install / train / convert / mix)"
-Say "build 2026-11-10-E" DarkGray
+Say "build 2026-11-10-F" DarkGray
 
 # ---------- 0. paths ----------
 $desk    = [Environment]::GetFolderPath("Desktop")
@@ -106,26 +106,23 @@ Say "[OK] Python: $py" Green
 Say "[..] Scanning for audio files in Downloads / Desktop / Music / Documents ..." Yellow
 
 $skipRx = '(?i)\\(RVC[^\\]*|datasets|convert_in|convert_out|final|recordings|logs|env|Applio)\\|'
-$allAudio = @()
-foreach ($d in $searchDirs) {
-    $allAudio += Get-ChildItem $d -File -Recurse -ErrorAction SilentlyContinue |
-                 Where-Object {
-                     ($_.Extension -match '(?i)^\.(aac|m4a|wav|mp3|flac|ogg)$') -and
-                     ($_.Length -gt 200KB) -and
-                     ($_.FullName -notlike "$workdir*") -and
-                     ($_.FullName -notmatch $skipRx)
-                 }
-}
+$allFiles = @()
+foreach ($d in $searchDirs) { $allFiles += Get-ChildItem $d -File -Recurse -ErrorAction SilentlyContinue }
+$allAudio = @($allFiles | Where-Object { $_.Name -match '(?i)\.(aac|m4a|wav|mp3|flac|ogg)$' })
 Say ("[..] Scan dirs: " + ($searchDirs -join " | ")) Gray
 Say ("[..] Audio candidates found: " + $allAudio.Count) Gray
 
-$vocalIn = $allAudio | Where-Object { $_.Name -match "^vocal_input" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-$instrIn = $allAudio | Where-Object { $_.Name -match "^instrumental" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$vocalIn = $allAudio | Where-Object { $_.Name -match '^vocal_input' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$instrIn = $allAudio | Where-Object { $_.Name -match '^instrumental' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $pitchShift = 0
 if ($vocalIn -and $vocalIn.Name -match "_p(-?\d+)") { $pitchShift = [int]$Matches[1] }
 
 # --- training data: prefer phone recordings (.aac/.m4a), never the AI song mp3 ---
-$cand = $allAudio | Where-Object { $_.Name -notmatch "^(vocal_input|instrumental)" }
+$cand = $allAudio | Where-Object {
+    ($_.Name -notmatch '^(vocal_input|instrumental)') -and
+    ($_.Length -gt 200KB) -and
+    ($_.FullName -notmatch $skipRx)
+}
 $recs = $cand | Where-Object { $_.Extension -match "^\.(aac|m4a)$" }
 if (-not $recs) { $recs = $cand | Where-Object { $_.Extension -eq ".wav" } }
 if (-not $recs) { $recs = $cand | Where-Object { $_.Extension -match "^\.(flac|mp3)$" } }
