@@ -10,6 +10,7 @@ function Say($m, $c = "White") { Write-Host $m -ForegroundColor $c }
 function Head($m) { Say ""; Say "================================================" Cyan; Say "  $m" Cyan; Say "================================================" Cyan }
 
 Head "RVC FULL AUTO  (install / train / convert / mix)"
+Say "build 2026-11-10-E" DarkGray
 
 # ---------- 0. paths ----------
 $desk    = [Environment]::GetFolderPath("Desktop")
@@ -107,9 +108,16 @@ Say "[..] Scanning for audio files in Downloads / Desktop / Music / Documents ..
 $skipRx = '(?i)\\(RVC[^\\]*|datasets|convert_in|convert_out|final|recordings|logs|env|Applio)\\|'
 $allAudio = @()
 foreach ($d in $searchDirs) {
-    $allAudio += Get-ChildItem $d -File -Recurse -ErrorAction SilentlyContinue -Include *.aac,*.m4a,*.wav,*.mp3,*.flac,*.ogg |
-                 Where-Object { ($_.Length -gt 200KB) -and ($_.FullName -notlike "$workdir*") -and ($_.FullName -notmatch $skipRx) }
+    $allAudio += Get-ChildItem $d -File -Recurse -ErrorAction SilentlyContinue |
+                 Where-Object {
+                     ($_.Extension -match '(?i)^\.(aac|m4a|wav|mp3|flac|ogg)$') -and
+                     ($_.Length -gt 200KB) -and
+                     ($_.FullName -notlike "$workdir*") -and
+                     ($_.FullName -notmatch $skipRx)
+                 }
 }
+Say ("[..] Scan dirs: " + ($searchDirs -join " | ")) Gray
+Say ("[..] Audio candidates found: " + $allAudio.Count) Gray
 
 $vocalIn = $allAudio | Where-Object { $_.Name -match "^vocal_input" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 $instrIn = $allAudio | Where-Object { $_.Name -match "^instrumental" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
