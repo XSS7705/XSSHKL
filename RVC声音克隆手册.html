@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 声音克隆：原理、训练与接单 SOP</title>
+<style>
+  :root{
+    --ink:#1a1c20; --sub:#5b6270; --line:#e6e8ec; --bg:#fbfbfc;
+    --accent:#2f6df6; --warn:#c2410c; --ok:#0f766e; --bad:#b91c1c;
+    --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",-apple-system,"Segoe UI",sans-serif;
+    line-height:1.75; font-size:15.5px;
+  }
+  .wrap{max-width:940px; margin:0 auto; padding:56px 28px 96px}
+  header{border-bottom:1px solid var(--line); padding-bottom:28px; margin-bottom:40px}
+  .kicker{font-size:12.5px; letter-spacing:.18em; color:var(--accent); font-weight:700; text-transform:uppercase}
+  h1{font-size:34px; line-height:1.3; margin:10px 0 12px; letter-spacing:-.01em}
+  .lede{color:var(--sub); font-size:16px; max-width:760px}
+  h2{
+    font-size:22px; margin:52px 0 6px; padding-top:20px; border-top:1px solid var(--line);
+    letter-spacing:-.01em;
+  }
+  h2 .num{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:10px; font-size:18px}
+  h3{font-size:16.5px; margin:26px 0 8px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:6px 0}
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:14.5px; background:var(--card)}
+  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
+  th{background:#f4f6f9; font-weight:600; font-size:13.5px; color:#374151}
+  code{background:#f1f3f6; padding:1px 6px; border-radius:4px; font-size:13.5px;
+       font-family:"JetBrains Mono",Consolas,monospace}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:18px 0}
+  .tldr{border-left:4px solid var(--accent)}
+  .warn{border-left:4px solid var(--warn); background:#fffaf5}
+  .ok{border-left:4px solid var(--ok); background:#f6fbfa}
+  .bad{border-left:4px solid var(--bad); background:#fdf6f6}
+  .flow{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0}
+  .step{background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px 14px; flex:1 1 150px; min-width:150px}
+  .step b{display:block; font-size:13px; color:var(--accent); margin-bottom:4px}
+  .step span{font-size:13.5px; color:var(--sub)}
+  .tag{display:inline-block; font-size:12px; padding:2px 8px; border-radius:20px; margin-right:6px; font-weight:600}
+  .t-ok{background:#e6f6f3; color:var(--ok)}
+  .t-warn{background:#fdf0e4; color:var(--warn)}
+  .t-bad{background:#fbe9e9; color:var(--bad)}
+  .small{font-size:13.5px; color:var(--sub)}
+  footer{margin-top:64px; padding-top:24px; border-top:1px solid var(--line); color:var(--sub); font-size:13px}
+  @media print{ body{background:#fff} .wrap{padding:0} h2{page-break-after:avoid} table{page-break-inside:avoid} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">内部手册 · 2026-11</div>
+  <h1>AI 声音克隆：原理、训练与接单 SOP</h1>
+  <p class="lede">把这两天做过的事情讲清楚：这套工具到底在做什么、为什么现在"不像你"、怎样才算训练到位、以及拿到单子后按什么流程交付。</p>
+</header>
+
+<h2><span class="num">01</span>一页速览</h2>
+<div class="card tldr">
+  <p><b>中心思想一句话：</b>这不是"变声"，是<b>音色迁移</b>——用你的录音训练一个"音色模型"，然后把任意一首歌里的人声，换成的音色，旋律、节奏、咬字全部保留。</p>
+  <p style="margin-bottom:0"><b>现在的状态：</b>管道已经打通（能出成品），但<b>模型质量是 Demo 级</b>。原因不是参数，是素材太少（14 分钟）＋训练轮数偏少（约 9000 步）。这个词听起来专业，本质就是"学得不够"。</p>
+</div>
+
+<h2><span class="num">02</span>这套东西到底在做什么</h2>
+<p>一首歌进来，出去的是一个"你唱的歌"。中间其实是两件事，被很多人混为一谈：</p>
+<table>
+  <tr><th style="width:22%">环节</th><th>在做什么</th><th style="width:26%">决定了什么</th></tr>
+  <tr><td><b>分离</b></td><td>把人声和伴奏从原曲里拆开（Demucs 模型）</td><td>人声干净不干净、有没有残留伴奏</td></tr>
+  <tr><td><b>音色迁移</b></td><td>保留人声的"内容"（唱什么音、什么节奏、怎么咬字），把"音色"（谁在唱）替换成模型里的音色</td><td><b>像不像你</b>——这一步完全取决于模型质量</td></tr>
+  <tr><td><b>混音</b></td><td>换好的人声 + 伴奏，做 EQ、压缩、混响、响度</td><td>好不好听、有没有"棚感"</td></tr>
+</table>
+<p class="small">所以：<b>混音只能修饰，不能改音色</b>。你现在听到"不像"，问题一定在第 2 步的模型上，不在后期。</p>
+
+<h3>技术链路（从录音到成品）</h3>
+<div class="flow">
+  <div class="step"><b>1 录音</b><span>干净人声，无伴奏</span></div>
+  <div class="step"><b>2 切分</b><span>切成 3.7 秒小段</span></div>
+  <div class="step"><b>3 提特征</b><span>音高曲线 + 音色向量</span></div>
+  <div class="step"><b>4 训练</b><span>生成器/判别器对抗</span></div>
+  <div class="step"><b>5 产出</b><span>.pth 模型 + .index 索引</span></div>
+  <div class="step"><b>6 推理</b><span>换声 → 混音 → 成品</span></div>
+</div>
+
+<h2><span class="num">03</span>为什么"不像你"——按影响排序</h2>
+
+<table>
+  <tr><th style="width:8%">排名</th><th style="width:26%">原因</th><th>为什么致命</th><th style="width:24%">怎么修</th></tr>
+  <tr>
+    <td><span class="tag t-bad">1</span></td>
+    <td><b>训练素材太少</b></td>
+    <td>你现在只有两段手机录音，合计约 14 分钟。行业里能"像"的模型，通常要 <b>30–60 分钟</b>干净人声。样本少，模型只能学到"平均音色"，细节（气声、尾音、共鸣位置）全丢。</td>
+    <td>补录到 30 分钟以上</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-bad">2</span></td>
+    <td><b>素材不干净</b></td>
+    <td>手机录音里有房间混响、底噪、可能有伴奏残留。模型会把这些"噪声特征"当成你的音色一起学进去，结果是"蒙着一层纱"。</td>
+    <td>安静房间、贴嘴、关空调</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-warn">3</span></td>
+    <td><b>音高被改动</b></td>
+    <td>升 12 个半音不只是"变高"，共振峰一起上移，等于换了个人。之前听着"尖细、不像你"，根子在这。</td>
+    <td>男声歌用 pitch 0</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-warn">4</span></td>
+    <td><b>训练步数偏少</b></td>
+    <td>200 轮 × 每轮 45 步 ≈ 9000 步。经验值：要稳定收敛通常 <b>2 万步以上</b>。9000 步属于"刚有个大概轮廓"。</td>
+    <td>加到 400–600 轮，或换更小 batch 多跑步数</td>
+  </tr>
+  <tr>
+    <td><span class="tag t-warn">5</span></td>
+    <td><b>源素材跨音域</b></td>
+    <td>用男声原唱去套女声模型，等于让模型做"跨性别映射"，天然失真。同一个模型唱女声原调的歌，像度会明显更好。</td>
+    <td>优先接同性别歌手的歌</td>
+  </tr>
+</table>
+
+<div class="card bad">
+  <b>结论要直说：</b>现在这个模型，是"能听出是个女的、但认不出是谁"的水平。拿它接单会被退。但<b>管道本身是通的</b>，把素材和轮数补上，它会变成另一个东西。
+</div>
+
+<h2><span class="num">04</span>训练的正确姿势</h2>
+
+<h3>4.1 录音规范（决定上限，比参数重要十倍）</h3>
+<table>
+  <tr><th style="width:22%">项目</th><th>要求</th></tr>
+  <tr><td>环境</td><td>小房间、有窗帘/衣柜吸音，关空调风扇，手机开飞行模式</td></tr>
+  <tr><td>距离</td><td>嘴离麦 10–15cm，别正对气流（防喷麦），略偏 15°</td></tr>
+  <tr><td>内容</td><td>正常说话 + 朗读，语速自然，带情绪起伏（<b>不要念经式</b>）</td></tr>
+  <tr><td>时长</td><td><b>30–60 分钟</b>有效人声（越多越好，但质量优先于时长）</td></tr>
+  <tr><td>禁止</td><td>不要放背景音乐、不要用免提、不要后期加混响/降噪美化</td></tr>
+  <tr><td>素材形态</td><td>一段一段录（每段 30–60 秒），方便排查质量</td></tr>
+</table>
+
+<h3>4.2 关键参数（我们这套管道的实际值）</h3>
+<table>
+  <tr><th style="width:26%">参数</th><th style="width:20%">当前值</th><th>建议值 / 说明</th></tr>
+  <tr><td>采样率</td><td>40000</td><td>保持 40k。别混用 32k/48k 素材</td></tr>
+  <tr><td>训练轮数 epochs</td><td>200</td><td><b>400–600</b>（配合 save_every 20）</td></tr>
+  <tr><td>batch size</td><td>8</td><td>显存够就 8–12；越小步数越多、越细腻但越慢</td></tr>
+  <tr><td>音高提取 f0</td><td>rmvpe</td><td>保持，人声场景最稳</td></tr>
+  <tr><td>音色编码器</td><td>contentvec</td><td>保持，跨语种/跨音域泛化好</td></tr>
+  <tr><td>索引 index</td><td>生成</td><td>推理时 index-rate 0.7–0.9，越高越贴模型音色</td></tr>
+</table>
+
+<h3>4.3 训练到什么程度算"能用"</h3>
+<ul>
+  <li>训练日志里 loss 持续下降后趋于平稳（不再大幅波动）</li>
+  <li>用一句"没参与训练"的话做测试，听起来是本人且不电音</li>
+  <li>连续唱 30 秒不出现"断续、吞字、金属声"</li>
+  <li>换三首不同风格的歌，都稳定 → 可以接单</li>
+</ul>
+
+<h2><span class="num">05</span>一首歌的交付流程（9 步）</h2>
+<ol>
+  <li><b>接需求</b>：确认歌名、是否要保留原调、交付格式、时长、是否加和声</li>
+  <li><b>收素材</b>：客户给原曲（最好无损）；确认版权/用途（个人娱乐 or 商用）</li>
+  <li><b>分离</b>：人声 + 伴奏拆开，检查人声是否残留乐器</li>
+  <li><b>定调</b>：同性别歌手 → pitch 0；跨性别 → 先试 ±12，做 A/B 两版给客户选</li>
+  <li><b>换声</b>：index-rate 0.7–0.9、protect 0.33、f0=rmvpe</li>
+  <li><b>修音</b>：跑一遍轻度音准修正（可选），剪掉明显破音段</li>
+  <li><b>混音</b>：EQ→压缩→侧链（人声出现时伴奏自动让路）→混响→限幅→响度 -11 LUFS</li>
+  <li><b>自检</b>：戴耳机听 3 遍——爆音、齿音、断续、人声是否被伴奏盖住</li>
+  <li><b>交付</b>：MP3 320k + WAV 各一份，命名 <code>歌名_音色_日期</code></li>
+</ol>
+
+<h2><span class="num">06</span>接单 SOP（平台运营）</h2>
+
+<h3>6.1 报价锚点</h3>
+<table>
+  <tr><th>阶段</th><th>定价</th><th>备注</th></tr>
+  <tr><td>冷启动（0–10 单）</td><td>39–69 元/首</td><td>目的是攒评价和样音，不是赚钱</td></tr>
+  <tr><td>有评价（10–50 单）</td><td>99–199 元/首</td><td>开始筛客户，拒绝"先做后付"</td></tr>
+  <tr><td>有作品集</td><td>199–399 元/首</td><td>加急、改调、对唱另计</td></tr>
+</table>
+
+<h3>6.2 首单话术模板</h3>
+<div class="card">
+  <p style="margin-top:0">"您好，AI 翻唱定制。流程：您发原曲 + 想要的音色 → 我先做 20 秒试听 → 满意再付全款 → 2 小时内交付完整版。试听不满意不收钱。"</p>
+  <p style="margin-bottom:0" class="small">要点：<b>先给试听片段</b>降低决策成本；<b>明确交付时间</b>；<b>写清不退款条件</b>（如已交付完整版）。</p>
+</div>
+
+<h3>6.3 验收与返工规则（写进商品详情）</h3>
+<ul>
+  <li>含 2 次免费微调（音量、混响、音准）</li>
+  <li>换歌/换音色/改调 = 新订单</li>
+  <li>不接受"听起来不像真人"作为退款理由（AI 特性需提前说明）</li>
+  <li>成品只交付音频，不交付模型</li>
+</ul>
+
+<h3>6.4 退单高发原因（提前规避）</h3>
+<table>
+  <tr><th style="width:34%">原因</th><th>规避动作</th></tr>
+  <tr><td>音色不像约定的人</td><td>下单前发 3 个样音让客户选音色</td></tr>
+  <tr><td>跑调/断续</td><td>接单前先自己跑一遍，难的歌直接不接</td></tr>
+  <tr><td>伴奏盖住人声</td><td>固定用侧链压缩，人声永远在前</td></tr>
+  <tr><td>交付太慢</td><td>承诺 24 小时，实际 2 小时交付</td></tr>
+</table>
+
+<h2><span class="num">07</span>什么时候能做成 APP 去卖</h2>
+<p>把成熟度分四级，你现在在 L2：</p>
+<table>
+  <tr><th style="width:12%">等级</th><th style="width:30%">状态</th><th>能卖什么</th></tr>
+  <tr><td><b>L1</b></td><td>能跑通，偶尔失败</td><td>自己玩</td></tr>
+  <tr><td><b>L2</b> <span class="tag t-warn">当前</span></td><td>稳定出片，音色一般</td><td>低价接单（<b>只能卖"服务"，不能卖"产品"</b>）</td></tr>
+  <tr><td><b>L3</b></td><td>音色像、失败率低、多音色库</td><td>接单规模化 + 卖会员</td></tr>
+  <tr><td><b>L4</b></td><td>有 UI、支付、授权链、客服</td><td>做成 APP/小程序卖订阅</td></tr>
+</table>
+<p class="small">做 APP 卖工具，还缺：图形界面、账号与计费、模型存储与隔离、滥用防护、声音授权验证、售后。<b>现阶段更划算的是先卖服务</b>——服务能验证需求，且不承担产品化成本。</p>
+
+<h2><span class="num">08</span>合规红线（必须知道）</h2>
+<div class="card warn">
+  <ul style="margin:0">
+    <li><b>声音权</b>：未经授权克隆他人（含配音演员、歌手）用于商业，可能侵犯声音权益。接单只用<b>客户本人</b>或已获授权的音色。</li>
+    <li><b>平台规则</b>：B站/抖音等要求标注"AI 生成"，不标会限流甚至下架。</li>
+    <li><b>音乐版权</b>：翻唱商用需词曲授权；个人非商用一般宽松，但仍可能被版权方投诉下架。</li>
+    <li><b>诈骗风险</b>：不得用于伪造他人语音进行诈骗、冒充。这条是刑事红线。</li>
+  </ul>
+</div>
+
+<h2><span class="num">09</span>本周行动清单</h2>
+<table>
+  <tr><th style="width:8%">序</th><th style="width:36%">动作</th><th>验收标准</th></tr>
+  <tr><td>1</td><td>补录 30 分钟干净人声</td><td>安静环境、无伴奏、分段 30–60 秒</td></tr>
+  <tr><td>2</td><td>重训模型 400 轮</td><td>loss 收敛，测试句不像电音</td></tr>
+  <tr><td>3</td><td>用同性别歌手的歌做 3 首样音</td><td>3 首风格不同，均可公开展示</td></tr>
+  <tr><td>4</td><td>闲鱼/小红书挂单</td><td>标题含"AI翻唱定制"，附 3 首样音</td></tr>
+  <tr><td>5</td><td>接 3 单低价试水</td><td>记录退单原因，回填到 6.4 表</td></tr>
+</table>
+
+<footer>
+  本文档基于当前实际管道（ApplIO / RVC + Demucs + FFmpeg）整理。<br>
+  参数为经验起点，不是绝对值；每换一批素材，都需要重新验证一次。
+</footer>
+
+</div>
+</body>
+</html>
