@@ -18,9 +18,12 @@ $music   = [Environment]::GetFolderPath("MyMusic")
 $docs    = [Environment]::GetFolderPath("MyDocuments")
 $searchDirs = @($dl, $desk, $music, $docs) | Where-Object { Test-Path $_ }
 
+$asciiWd = Join-Path $env:USERPROFILE "RVC"
 $workdir = $null
-Get-ChildItem $desk -Directory -Filter "RVC*" -ErrorAction SilentlyContinue | ForEach-Object { $workdir = $_.FullName }
-if (-not $workdir -and (Test-Path (Join-Path $env:USERPROFILE "RVC\Applio\core.py"))) { $workdir = Join-Path $env:USERPROFILE "RVC" }
+if (Test-Path (Join-Path $asciiWd "Applio\core.py")) { $workdir = $asciiWd }
+if (-not $workdir) {
+    Get-ChildItem $desk -Directory -Filter "RVC*" -ErrorAction SilentlyContinue | ForEach-Object { $workdir = $_.FullName }
+}
 if (-not $workdir) {
     Say "[ERROR] No folder starting with 'RVC' on Desktop." Red
     Read-Host "Press Enter to exit"; exit 1
@@ -31,33 +34,37 @@ if (-not (Test-Path $core)) {
     Say "[ERROR] Missing: $core" Red
     Read-Host "Press Enter to exit"; exit 1
 }
-Say "[OK] Workdir: $workdir" Green
 
 # ---------- 0.5 migrate to a pure-ASCII path (Chinese paths break ApplIO) ----------
 $pureAscii = $true
 foreach ($ch in $workdir.ToCharArray()) { if ([int]$ch -gt 127) { $pureAscii = $false; break } }
 if (-not $pureAscii) {
-    $target = Join-Path $env:USERPROFILE "RVC"
-    Say "[..] Non-ASCII path detected - migrating to $target ..." Yellow
-    Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep 2
-    if (Test-Path $target) { Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue }
-    try {
-        Move-Item $workdir $target -Force -ErrorAction Stop
-    } catch {
-        Say "[..] Rename blocked, copying instead (a few minutes) ..." Yellow
-        Copy-Item $workdir $target -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item $workdir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if (-not (Test-Path (Join-Path $target "Applio\core.py"))) {
-        Say "[ERROR] Migration failed. Please rename the Desktop folder to 'RVC' manually." Red
-        Read-Host "Press Enter to exit"; exit 1
+    $target = $asciiWd
+    if (Test-Path (Join-Path $target "Applio\core.py")) {
+        Say "[OK] Existing ASCII install found - using it: $target" Green
+    } else {
+        Say "[..] Non-ASCII path detected - migrating to $target ..." Yellow
+        Get-Process python, pythonw -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep 2
+        if (Test-Path $target) { Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue }
+        try {
+            Move-Item $workdir $target -Force -ErrorAction Stop
+        } catch {
+            Say "[..] Rename blocked, copying instead (a few minutes) ..." Yellow
+            Copy-Item $workdir $target -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item $workdir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if (-not (Test-Path (Join-Path $target "Applio\core.py"))) {
+            Say "[ERROR] Migration failed. Please rename the Desktop folder to 'RVC' manually." Red
+            Read-Host "Press Enter to exit"; exit 1
+        }
+        Say "[OK] Migrated: $target" Green
     }
     $workdir = $target
     $appDir  = Join-Path $workdir "Applio"
     $core    = Join-Path $appDir "core.py"
-    Say "[OK] Migrated: $workdir" Green
 }
+Say "[OK] Workdir: $workdir" Green
 
 $dirRec   = Join-Path $workdir "recordings"
 $dirRaw   = Join-Path $workdir "datasets\yelan_raw"
@@ -85,14 +92,15 @@ Say "[OK] Python: $py" Green
 # everything else that is audio and not these two -> training data
 Say "[..] Scanning for audio files in Downloads / Desktop / Music / Documents ..." Yellow
 
+$skipRx = '(?i)\\(RVC[^\\]*|datasets|convert_in|convert_out|final|recordings|logs|env|Applio)\\|'
 $allAudio = @()
 foreach ($d in $searchDirs) {
     $allAudio += Get-ChildItem $d -File -Recurse -ErrorAction SilentlyContinue -Include *.aac,*.m4a,*.wav,*.mp3,*.flac,*.ogg |
-                 Where-Object { $_.FullName -notlike "$workdir*" -and $_.Length -gt 200KB }
+                 Where-Object { ($_.Length -gt 200KB) -and ($_.FullName -notlike "$workdir*") -and ($_.FullName -notmatch $skipRx) }
 }
 
-$vocalIn = $allAudio | Where-Object { $_.Name -match "^vocal_input" } | Select-Object -First 1
-$instrIn = $allAudio | Where-Object { $_.Name -match "^instrumental" } | Select-Object -First 1
+$vocalIn = $allAudio | Where-Object { $_.Name -match "^vocal_input" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+$instrIn = $allAudio | Where-Object { $_.Name -match "^instrumental" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 
 # --- training data: prefer phone recordings (.aac/.m4a), never the AI song mp3 ---
 $cand = $allAudio | Where-Object { $_.Name -notmatch "^(vocal_input|instrumental)" }
@@ -397,19 +405,19 @@ if (-not (Test-Path $outVocal)) { Say "[ERROR] inference failed - send the red t
 $finalMp3 = Join-Path $dirFinal "final_yelan.mp3"
 Say "[MIX] Building final track (studio chain) ..." Yellow
 if ($instrIn) {
-    $fc = "[0:a]highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9[v0];" +
+    $fc = "[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9[v0];" +
           "[v0]asplit=2[v][vk];" +
-          "[1:a]volume=0.80,extrastereo=m=1.15[bg0];" +
+          "[1:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=0.80,extrastereo=m=1.15[bg0];" +
           "[bg0][vk]sidechaincompress=threshold=0.05:ratio=2.2:attack=6:release=220[bg];" +
           "[v]aecho=0.9:0.9:35:0.08[vf];" +
-          "[vf][bg]amix=inputs=2:duration=longest:normalize=0,equalizer=f=60:t=q:w=1:g=1.5,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9,aresample=44100[out]"
+          "[vf][bg]amix=inputs=2:duration=longest:normalize=0,equalizer=f=60:t=q:w=1:g=1.5,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9[out]"
     & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex $fc -map "[out]" -b:a 320k $finalMp3
     if (-not (Test-Path $finalMp3)) {
         Say "[MIX] Advanced filters unavailable - fallback mix ..." Yellow
-        & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex "[0:a]volume=1.3,highpass=f=85,acompressor=threshold=0.09:ratio=3:attack=8:release=160[v];[1:a]volume=0.78[bg];[v][bg]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9" -ar 44100 -b:a 320k $finalMp3
+        & $ff -y -loglevel error -i $outVocal -i $instrIn.FullName -filter_complex "[0:a]aresample=44100,aformat=channel_layouts=stereo,volume=1.3,highpass=f=85,acompressor=threshold=0.09:ratio=3:attack=8:release=160[v];[1:a]aresample=44100,aformat=channel_layouts=stereo,volume=0.78[bg];[v][bg]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9" -b:a 320k $finalMp3
     }
 } else {
-    & $ff -y -loglevel error -i $outVocal -filter_complex "[0:a]highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9,aecho=0.9:0.9:35:0.08,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9,aresample=44100" -b:a 320k $finalMp3
+    & $ff -y -loglevel error -i $outVocal -filter_complex "[0:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,highpass=f=85,equalizer=f=280:t=q:w=1.4:g=-2.5,equalizer=f=3200:t=q:w=1.2:g=2.5,equalizer=f=10500:t=h:g=1.5,acompressor=threshold=0.09:ratio=3.2:attack=8:release=160:makeup=1.9,aecho=0.9:0.9:35:0.08,alimiter=limit=0.95,loudnorm=I=-11.5:TP=-1.0:LRA=9" -b:a 320k $finalMp3
 }
 
 Head "ALL DONE"
