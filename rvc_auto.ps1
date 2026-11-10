@@ -75,6 +75,18 @@ foreach ($d in @($dirRec, $dirRaw, $dirIn, $dirOut, $dirFinal)) {
     if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
 }
 
+$logsDir    = Join-Path $appDir "logs\yelan"
+$weightsDir = Join-Path $appDir "assets\weights"
+
+function Get-BestPth {
+    $cand = @()
+    if (Test-Path $logsDir) { $cand += Get-ChildItem $logsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
+    if (Test-Path $weightsDir) { $cand += Get-ChildItem $weightsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
+    $cand = @($cand | Where-Object { $_.Name -notmatch '^(G_|D_)' })
+    if ($cand.Count -eq 0) { return $null }
+    return ($cand | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
+}
+
 # ---------- 1. find python ----------
 $py = $null
 foreach ($c in @("$env:LocalAppData\Programs\Python\Python312\python.exe",
@@ -109,13 +121,19 @@ if (-not $recs) { $recs = $cand | Where-Object { $_.Extension -eq ".wav" } }
 if (-not $recs) { $recs = $cand | Where-Object { $_.Extension -match "^\.(flac|mp3)$" } }
 $trainSrcs = @($recs | Sort-Object Length -Descending | Select-Object -First 10)
 
+$trainedNow = Get-BestPth
 if (-not $trainSrcs -or $trainSrcs.Count -eq 0) {
-    Say "[ERROR] No voice recording found. Put your own recording (aac/m4a/wav) in Downloads." Red
-    Start-Process explorer.exe $dl
-    Read-Host "Press Enter to exit"; exit 1
+    if ($trainedNow) {
+        Say "[OK] Model already trained - no training audio needed." Green
+    } else {
+        Say "[ERROR] No voice recording found. Put your own recording (aac/m4a/wav) in Downloads." Red
+        Start-Process explorer.exe $dl
+        Read-Host "Press Enter to exit"; exit 1
+    }
+} else {
+    Say "[OK] Training voices ($($trainSrcs.Count) file(s)):" Green
+    foreach ($t in $trainSrcs) { Say ("     - " + $t.Name + "  (" + [math]::Round($t.Length/1MB,1) + " MB)") Gray }
 }
-Say "[OK] Training voices ($($trainSrcs.Count) file(s)):" Green
-foreach ($t in $trainSrcs) { Say ("     - " + $t.Name + "  (" + [math]::Round($t.Length/1MB,1) + " MB)") Gray }
 if ($vocalIn) { Say "[OK] AI vocal       : $($vocalIn.Name)" Green } else { Say "[WARN] vocal_input.wav not found - will skip conversion" Yellow }
 if ($instrIn) { Say "[OK] Instrumental   : $($instrIn.Name)" Green } else { Say "[WARN] instrumental.wav not found - final mix will be vocal only" Yellow }
 Say ""
@@ -127,18 +145,22 @@ if ($LASTEXITCODE -ne 0) {
     $lib = Join-Path $appDir "ffmpeg.exe"
     if (Test-Path $lib) { $ff = $lib } else { Say "[ERROR] ffmpeg not found." Red; Read-Host "Enter to exit"; exit 1 }
 }
-Say "[1/6] Preparing training data ..." Yellow
-Get-ChildItem $dirRaw -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-$n = 0
-foreach ($t in $trainSrcs) {
-    $n++
-    $dst = Join-Path $dirRaw ("voice_" + $n.ToString("00") + ".wav")
-    Say ("  converting: " + $t.Name) Gray
-    & $ff -y -loglevel error -i $t.FullName -ac 1 -ar 44100 $dst 2>$null
+if ($trainSrcs.Count -gt 0) {
+    Say "[1/6] Preparing training data ..." Yellow
+    Get-ChildItem $dirRaw -File -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+    $n = 0
+    foreach ($t in $trainSrcs) {
+        $n++
+        $dst = Join-Path $dirRaw ("voice_" + $n.ToString("00") + ".wav")
+        Say ("  converting: " + $t.Name) Gray
+        & $ff -y -loglevel error -i $t.FullName -ac 1 -ar 44100 $dst 2>$null
+    }
+    $made = @(Get-ChildItem $dirRaw -Filter "*.wav" -ErrorAction SilentlyContinue).Count
+    if ($made -eq 0) { Say "[ERROR] ffmpeg convert failed." Red; Read-Host "Enter to exit"; exit 1 }
+    Say "[OK] $made training wav(s) ready" Green
+} else {
+    Say "[1/6] Training data skipped - using existing model" Green
 }
-$made = @(Get-ChildItem $dirRaw -Filter "*.wav" -ErrorAction SilentlyContinue).Count
-if ($made -eq 0) { Say "[ERROR] ffmpeg convert failed." Red; Read-Host "Enter to exit"; exit 1 }
-Say "[OK] $made training wav(s) ready" Green
 
 # ---------- 4. env install ----------
 $venvPy = Join-Path $workdir "env\Scripts\python.exe"
@@ -335,18 +357,6 @@ foreach ($as in $assets) {
 Say "[OK] pitch + embedder models ready" Green
 
 # ---------- 5. train (skipped if the model already exists) ----------
-$logsDir = Join-Path $appDir "logs\yelan"
-$weightsDir = Join-Path $appDir "assets\weights"
-
-function Get-BestPth {
-    $cand = @()
-    if (Test-Path $logsDir) { $cand += Get-ChildItem $logsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
-    if (Test-Path $weightsDir) { $cand += Get-ChildItem $weightsDir -Filter "*.pth" -Recurse -ErrorAction SilentlyContinue }
-    $cand = @($cand | Where-Object { $_.Name -notmatch '^(G_|D_)' })
-    if ($cand.Count -eq 0) { return $null }
-    return ($cand | Sort-Object LastWriteTime -Descending | Select-Object -First 1).FullName
-}
-
 $pth = Get-BestPth
 if ($pth) {
     Say "[5/6] Model already exists - skipping training" Green
@@ -374,7 +384,7 @@ Say "[OK] Model: $pth" Green
 # ---------- 6. convert + mix ----------
 if (-not $vocalIn) {
     Say ""
-    Say "Training finished. Download vocal_input.wav into Downloads, then run this file again to convert." Yellow
+    Say "Model ready. Put vocal_input.* and instrumental.* into Downloads, then run this file again." Yellow
     Read-Host "Press Enter to exit"; exit 0
 }
 
