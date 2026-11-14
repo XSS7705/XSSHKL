@@ -1,0 +1,175 @@
+Windows PowerShell 5.1
+版权所有 (C) Microsoft Corporation。保留所有权利。
+
+PS C:\Users\Administrator> $root="C:\Users\Administrator\seedvc"; $repo="$root\repo"
+PS C:\Users\Administrator> $py="C:\Users\Administrator\AppData\Local\Programs\Python\Python312\python.exe"
+PS C:\Users\Administrator> New-Item -ItemType Directory -Force $repo | Out-Null
+PS C:\Users\Administrator> "disk free: " + [math]::Round((Get-PSDrive C).Free/1GB,1) + " GB"
+disk free: 98.4 GB
+PS C:\Users\Administrator> if (-not (Test-Path "$repo\inference.py")) {
+>>   if (Get-Command git -ErrorAction SilentlyContinue) { git clone --depth 1 https://github.com/Plachtaa/seed-vc.git $repo }
+>>   if (-not (Test-Path "$repo\inference.py")) {
+>>     Invoke-WebRequest -Uri "https://codeload.github.com/Plachtaa/seed-vc/zip/refs/heads/main" -OutFile "$root\s.zip"
+>>     Expand-Archive "$root\s.zip" -DestinationPath "$root\_t" -Force
+>>     Get-ChildItem "$root\_t\seed-vc-main" | Move-Item -Destination $repo -Force
+>>     Remove-Item "$root\_t","$root\s.zip" -Recurse -Force
+>>   }
+>> }
+PS C:\Users\Administrator> "code ok: " + (Test-Path "$repo\inference.py")
+code ok: True
+PS C:\Users\Administrator> if (-not (Test-Path "$repo\venv\Scripts\python.exe")) { & $py -m venv "$repo\venv" }
+PS C:\Users\Administrator> $vp="$repo\venv\Scripts\python.exe"
+PS C:\Users\Administrator> & $vp -m pip install -U pip -q -i https://pypi.tuna.tsinghua.edu.cn/simple
+PS C:\Users\Administrator> "--- torch cu128 ---"
+--- torch cu128 ---
+PS C:\Users\Administrator> & $vp -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+Looking in indexes: https://download.pytorch.org/whl/cu128
+Requirement already satisfied: torch in .\seedvc\repo\venv\Lib\site-packages (2.11.0+cu128)
+Requirement already satisfied: torchaudio in .\seedvc\repo\venv\Lib\site-packages (2.11.0+cu128)
+Requirement already satisfied: filelock in .\seedvc\repo\venv\Lib\site-packages (from torch) (4.2.4)
+Requirement already satisfied: typing-extensions>=4.10.0 in .\seedvc\repo\venv\Lib\site-packages (from torch) (4.16.0)
+Requirement already satisfied: setuptools<82 in .\seedvc\repo\venv\Lib\site-packages (from torch) (78.1.0)
+Requirement already satisfied: sympy>=1.13.3 in .\seedvc\repo\venv\Lib\site-packages (from torch) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in .\seedvc\repo\venv\Lib\site-packages (from torch) (3.7)
+Requirement already satisfied: jinja2 in .\seedvc\repo\venv\Lib\site-packages (from torch) (3.1.6)
+Requirement already satisfied: fsspec>=0.8.5 in .\seedvc\repo\venv\Lib\site-packages (from torch) (2026.9.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in .\seedvc\repo\venv\Lib\site-packages (from sympy>=1.13.3->torch) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in .\seedvc\repo\venv\Lib\site-packages (from jinja2->torch) (3.0.3)
+PS C:\Users\Administrator> & $vp -c "import torch" 2>$null
+PS C:\Users\Administrator> if ($LASTEXITCODE -ne 0) { & $vp -m pip install torch torchaudio --find-links https://mirrors.aliyun.com/pytorch-wheels/cu128/ -i https://pypi.tuna.tsinghua.edu.cn/simple }
+PS C:\Users\Administrator> "--- minimal deps (verified) ---"
+--- minimal deps (verified) ---
+PS C:\Users\Administrator> & $vp -m pip install "numpy==1.26.4" "scipy==1.13.1" "librosa==0.10.2" "soundfile==0.12.1" "transformers==4.46.3" "huggingface-hub>=0.28.1" "munch==4.0.0" "einops==0.8.0" "descript-audio-codec==1.0.0" "gradio==5.23.0" "pydub==0.25.1" "hydra-core==1.3.2" pyyaml python-dotenv -i https://pypi.tuna.tsinghua.edu.cn/simple
+Looking in indexes: https://pypi.tuna.tsinghua.edu.cn/simple
+Requirement already satisfied: numpy==1.26.4 in .\seedvc\repo\venv\Lib\site-packages (1.26.4)
+Requirement already satisfied: scipy==1.13.1 in .\seedvc\repo\venv\Lib\site-packages (1.13.1)
+Requirement already satisfied: librosa==0.10.2 in .\seedvc\repo\venv\Lib\site-packages (0.10.2)
+Requirement already satisfied: soundfile==0.12.1 in .\seedvc\repo\venv\Lib\site-packages (0.12.1)
+Requirement already satisfied: transformers==4.46.3 in .\seedvc\repo\venv\Lib\site-packages (4.46.3)
+Requirement already satisfied: huggingface-hub>=0.28.1 in .\seedvc\repo\venv\Lib\site-packages (0.36.2)
+Requirement already satisfied: munch==4.0.0 in .\seedvc\repo\venv\Lib\site-packages (4.0.0)
+Requirement already satisfied: einops==0.8.0 in .\seedvc\repo\venv\Lib\site-packages (0.8.0)
+Requirement already satisfied: descript-audio-codec==1.0.0 in .\seedvc\repo\venv\Lib\site-packages (1.0.0)
+Requirement already satisfied: gradio==5.23.0 in .\seedvc\repo\venv\Lib\site-packages (5.23.0)
+Requirement already satisfied: pydub==0.25.1 in .\seedvc\repo\venv\Lib\site-packages (0.25.1)
+Requirement already satisfied: hydra-core==1.3.2 in .\seedvc\repo\venv\Lib\site-packages (1.3.2)
+Requirement already satisfied: pyyaml in .\seedvc\repo\venv\Lib\site-packages (6.0.3)
+Requirement already satisfied: python-dotenv in .\seedvc\repo\venv\Lib\site-packages (1.2.4)
+Requirement already satisfied: audioread>=2.1.9 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (3.1.0)
+Requirement already satisfied: scikit-learn>=0.20.0 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (1.9.1)
+Requirement already satisfied: joblib>=0.14 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (1.6.0)
+Requirement already satisfied: decorator>=4.3.0 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (5.3.1)
+Requirement already satisfied: numba>=0.51.0 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (0.68.1)
+Requirement already satisfied: pooch>=1.1 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (1.9.0)
+Requirement already satisfied: soxr>=0.3.2 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (1.1.0)
+Requirement already satisfied: typing-extensions>=4.1.1 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (4.16.0)
+Requirement already satisfied: lazy-loader>=0.1 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (0.6)
+Requirement already satisfied: msgpack>=1.0 in .\seedvc\repo\venv\Lib\site-packages (from librosa==0.10.2) (1.2.4)
+Requirement already satisfied: cffi>=1.0 in .\seedvc\repo\venv\Lib\site-packages (from soundfile==0.12.1) (2.1.1)
+Requirement already satisfied: filelock in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (4.2.4)
+Requirement already satisfied: packaging>=20.0 in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (26.3)
+Requirement already satisfied: regex!=2019.12.17 in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (2026.11.9)
+Requirement already satisfied: requests in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (2.34.2)
+Requirement already satisfied: tokenizers<0.21,>=0.20 in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (0.20.3)
+Requirement already satisfied: safetensors>=0.4.1 in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (0.8.0)
+Requirement already satisfied: tqdm>=4.27 in .\seedvc\repo\venv\Lib\site-packages (from transformers==4.46.3) (4.70.1)
+Requirement already satisfied: argbind>=0.3.7 in .\seedvc\repo\venv\Lib\site-packages (from descript-audio-codec==1.0.0) (0.3.9)
+Requirement already satisfied: descript-audiotools>=0.7.2 in .\seedvc\repo\venv\Lib\site-packages (from descript-audio-codec==1.0.0) (0.7.2)
+Requirement already satisfied: torch in .\seedvc\repo\venv\Lib\site-packages (from descript-audio-codec==1.0.0) (2.11.0+cu128)
+Requirement already satisfied: torchaudio in .\seedvc\repo\venv\Lib\site-packages (from descript-audio-codec==1.0.0) (2.11.0+cu128)
+Requirement already satisfied: aiofiles<24.0,>=22.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (23.2.1)
+Requirement already satisfied: anyio<5.0,>=3.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (4.16.0)
+Requirement already satisfied: fastapi<1.0,>=0.115.2 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.162.6)
+Requirement already satisfied: ffmpy in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (1.0.0)
+Requirement already satisfied: gradio-client==1.8.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (1.8.0)
+Requirement already satisfied: groovy~=0.1 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.1.2)
+Requirement already satisfied: httpx>=0.24.1 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.28.1)
+Requirement already satisfied: jinja2<4.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (3.1.6)
+Requirement already satisfied: markupsafe<4.0,>=2.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (3.0.3)
+Requirement already satisfied: orjson~=3.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (3.13.0)
+Requirement already satisfied: pandas<3.0,>=1.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (2.3.3)
+Requirement already satisfied: pillow<12.0,>=8.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (11.3.0)
+Requirement already satisfied: pydantic>=2.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (2.14.3)
+Requirement already satisfied: python-multipart>=0.0.18 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.0.33)
+Requirement already satisfied: ruff>=0.9.3 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.17.5)
+Requirement already satisfied: safehttpx<0.2.0,>=0.1.6 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.1.7)
+Requirement already satisfied: semantic-version~=2.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (2.10.0)
+Requirement already satisfied: starlette<1.0,>=0.40.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.52.1)
+Requirement already satisfied: tomlkit<0.14.0,>=0.12.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.13.3)
+Requirement already satisfied: typer<1.0,>=0.12 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.29.1)
+Requirement already satisfied: uvicorn>=0.14.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio==5.23.0) (0.54.0)
+Requirement already satisfied: omegaconf<2.4,>=2.2 in .\seedvc\repo\venv\Lib\site-packages (from hydra-core==1.3.2) (2.3.1)
+Requirement already satisfied: antlr4-python3-runtime==4.9.* in .\seedvc\repo\venv\Lib\site-packages (from hydra-core==1.3.2) (4.9.3)
+Requirement already satisfied: fsspec in .\seedvc\repo\venv\Lib\site-packages (from gradio-client==1.8.0->gradio==5.23.0) (2026.9.0)
+Requirement already satisfied: websockets<16.0,>=10.0 in .\seedvc\repo\venv\Lib\site-packages (from gradio-client==1.8.0->gradio==5.23.0) (15.0.1)
+Requirement already satisfied: idna>=2.8 in .\seedvc\repo\venv\Lib\site-packages (from anyio<5.0,>=3.0->gradio==5.23.0) (3.20)
+Requirement already satisfied: typing-inspection>=0.4.2 in .\seedvc\repo\venv\Lib\site-packages (from fastapi<1.0,>=0.115.2->gradio==5.23.0) (0.4.5)
+Requirement already satisfied: annotated-doc>=0.0.2 in .\seedvc\repo\venv\Lib\site-packages (from fastapi<1.0,>=0.115.2->gradio==5.23.0) (0.0.6)
+Requirement already satisfied: opentelemetry-api>=1.44.0 in .\seedvc\repo\venv\Lib\site-packages (from fastapi<1.0,>=0.115.2->gradio==5.23.0) (1.45.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in .\seedvc\repo\venv\Lib\site-packages (from pandas<3.0,>=1.0->gradio==5.23.0) (4.0.0)
+Requirement already satisfied: pytz>=2020.1 in .\seedvc\repo\venv\Lib\site-packages (from pandas<3.0,>=1.0->gradio==5.23.0) (2026.6)
+Requirement already satisfied: tzdata>=2022.7 in .\seedvc\repo\venv\Lib\site-packages (from pandas<3.0,>=1.0->gradio==5.23.0) (2026.6)
+Requirement already satisfied: shellingham>=1.3.0 in .\seedvc\repo\venv\Lib\site-packages (from typer<1.0,>=0.12->gradio==5.23.0) (1.5.4)
+Requirement already satisfied: rich>=13.8.0 in .\seedvc\repo\venv\Lib\site-packages (from typer<1.0,>=0.12->gradio==5.23.0) (15.0.0)
+Requirement already satisfied: colorama in .\seedvc\repo\venv\Lib\site-packages (from typer<1.0,>=0.12->gradio==5.23.0) (0.4.6)
+Requirement already satisfied: docstring-parser in .\seedvc\repo\venv\Lib\site-packages (from argbind>=0.3.7->descript-audio-codec==1.0.0) (0.18.0)
+Requirement already satisfied: pycparser in .\seedvc\repo\venv\Lib\site-packages (from cffi>=1.0->soundfile==0.12.1) (3.12)
+Requirement already satisfied: pyloudnorm in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.0)
+Requirement already satisfied: importlib-resources in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (7.1.0)
+Requirement already satisfied: julius in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.8)
+Requirement already satisfied: ipython in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (9.18.1)
+Requirement already satisfied: matplotlib in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.11.2)
+Requirement already satisfied: pystoi in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.4.1)
+Requirement already satisfied: torch-stoi in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.3)
+Requirement already satisfied: flatten-dict in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.5.0)
+Requirement already satisfied: markdown2 in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (2.5.5)
+Requirement already satisfied: randomname in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.1)
+Requirement already satisfied: protobuf<3.20,>=3.9.2 in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.19.6)
+Requirement already satisfied: tensorboard in .\seedvc\repo\venv\Lib\site-packages (from descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (2.20.0)
+Requirement already satisfied: certifi in .\seedvc\repo\venv\Lib\site-packages (from httpx>=0.24.1->gradio==5.23.0) (2026.10.23)
+Requirement already satisfied: httpcore==1.* in .\seedvc\repo\venv\Lib\site-packages (from httpx>=0.24.1->gradio==5.23.0) (1.0.9)
+Requirement already satisfied: h11>=0.16 in .\seedvc\repo\venv\Lib\site-packages (from httpcore==1.*->httpx>=0.24.1->gradio==5.23.0) (0.16.0)
+Requirement already satisfied: cloudpickle>=3.0 in .\seedvc\repo\venv\Lib\site-packages (from joblib>=0.14->librosa==0.10.2) (3.1.2)
+Requirement already satisfied: llvmlite<0.51,>=0.50.0dev0 in .\seedvc\repo\venv\Lib\site-packages (from numba>=0.51.0->librosa==0.10.2) (0.50.0)
+Requirement already satisfied: platformdirs>=2.5.0 in .\seedvc\repo\venv\Lib\site-packages (from pooch>=1.1->librosa==0.10.2) (4.14.5)
+Requirement already satisfied: annotated-types>=0.6.0 in .\seedvc\repo\venv\Lib\site-packages (from pydantic>=2.0->gradio==5.23.0) (0.8.0)
+Requirement already satisfied: pydantic-core==2.50.4 in .\seedvc\repo\venv\Lib\site-packages (from pydantic>=2.0->gradio==5.23.0) (2.50.4)
+Requirement already satisfied: charset_normalizer<4,>=2 in .\seedvc\repo\venv\Lib\site-packages (from requests->transformers==4.46.3) (3.5.2)
+Requirement already satisfied: urllib3<3,>=1.26 in .\seedvc\repo\venv\Lib\site-packages (from requests->transformers==4.46.3) (2.8.0)
+Requirement already satisfied: markdown-it-py>=2.2.0 in .\seedvc\repo\venv\Lib\site-packages (from rich>=13.8.0->typer<1.0,>=0.12->gradio==5.23.0) (4.3.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in .\seedvc\repo\venv\Lib\site-packages (from rich>=13.8.0->typer<1.0,>=0.12->gradio==5.23.0) (2.21.0)
+Requirement already satisfied: mdurl~=0.1 in .\seedvc\repo\venv\Lib\site-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer<1.0,>=0.12->gradio==5.23.0) (0.1.2)
+Requirement already satisfied: narwhals>=2.0.1 in .\seedvc\repo\venv\Lib\site-packages (from scikit-learn>=0.20.0->librosa==0.10.2) (2.28.0)
+Requirement already satisfied: threadpoolctl>=3.5.0 in .\seedvc\repo\venv\Lib\site-packages (from scikit-learn>=0.20.0->librosa==0.10.2) (3.8.0)
+Requirement already satisfied: click>=7.0 in .\seedvc\repo\venv\Lib\site-packages (from uvicorn>=0.14.0->gradio==5.23.0) (8.5.1)
+Requirement already satisfied: ipython-pygments-lexers>=1.0.0 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (1.1.1)
+Requirement already satisfied: jedi>=0.18.2 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.20.1)
+Requirement already satisfied: matplotlib-inline>=0.1.6 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.2)
+Requirement already satisfied: prompt_toolkit<3.1.0,>=3.0.41 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.0.53)
+Requirement already satisfied: psutil>=7 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (7.2.2)
+Requirement already satisfied: stack_data>=0.6.0 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.6.3)
+Requirement already satisfied: traitlets>=5.13.0 in .\seedvc\repo\venv\Lib\site-packages (from ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (5.16.1)
+Requirement already satisfied: wcwidth>=0.1.4 in .\seedvc\repo\venv\Lib\site-packages (from prompt_toolkit<3.1.0,>=3.0.41->ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.9.4)
+Requirement already satisfied: parso<0.9.0,>=0.8.7 in .\seedvc\repo\venv\Lib\site-packages (from jedi>=0.18.2->ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.8.7)
+Requirement already satisfied: executing>=1.2.0 in .\seedvc\repo\venv\Lib\site-packages (from stack_data>=0.6.0->ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (2.3.0)
+Requirement already satisfied: asttokens>=2.1.0 in .\seedvc\repo\venv\Lib\site-packages (from stack_data>=0.6.0->ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.0.2)
+Requirement already satisfied: pure-eval in .\seedvc\repo\venv\Lib\site-packages (from stack_data>=0.6.0->ipython->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.2.4)
+Requirement already satisfied: setuptools<82 in .\seedvc\repo\venv\Lib\site-packages (from torch->descript-audio-codec==1.0.0) (78.1.0)
+Requirement already satisfied: sympy>=1.13.3 in .\seedvc\repo\venv\Lib\site-packages (from torch->descript-audio-codec==1.0.0) (1.14.0)
+Requirement already satisfied: networkx>=2.5.1 in .\seedvc\repo\venv\Lib\site-packages (from torch->descript-audio-codec==1.0.0) (3.7)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in .\seedvc\repo\venv\Lib\site-packages (from sympy>=1.13.3->torch->descript-audio-codec==1.0.0) (1.3.0)
+Requirement already satisfied: contourpy>=1.0.1 in .\seedvc\repo\venv\Lib\site-packages (from matplotlib->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (1.3.3)
+Requirement already satisfied: cycler>=0.10 in .\seedvc\repo\venv\Lib\site-packages (from matplotlib->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in .\seedvc\repo\venv\Lib\site-packages (from matplotlib->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (4.68.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in .\seedvc\repo\venv\Lib\site-packages (from matplotlib->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (1.5.1)
+Requirement already satisfied: pyparsing>=3 in .\seedvc\repo\venv\Lib\site-packages (from matplotlib->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.3.3)
+Requirement already satisfied: fire in .\seedvc\repo\venv\Lib\site-packages (from randomname->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.7.1)
+Requirement already satisfied: termcolor in .\seedvc\repo\venv\Lib\site-packages (from fire->randomname->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.3.0)
+Requirement already satisfied: absl-py>=0.4 in .\seedvc\repo\venv\Lib\site-packages (from tensorboard->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (2.5.1)
+Requirement already satisfied: grpcio>=1.48.2 in .\seedvc\repo\venv\Lib\site-packages (from tensorboard->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (1.85.1)
+Requirement already satisfied: markdown>=2.6.8 in .\seedvc\repo\venv\Lib\site-packages (from tensorboard->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.11.3)
+Requirement already satisfied: tensorboard-data-server<0.8.0,>=0.7.0 in .\seedvc\repo\venv\Lib\site-packages (from tensorboard->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (0.7.2)
+Requirement already satisfied: werkzeug>=1.0.1 in .\seedvc\repo\venv\Lib\site-packages (from tensorboard->descript-audiotools>=0.7.2->descript-audio-codec==1.0.0) (3.1.9)
+PS C:\Users\Administrator> & $vp -c "import torch;print('TORCH',torch.__version__,'CUDA',torch.cuda.is_available(),torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO-GPU')"
+TORCH 2.11.0+cu128 CUDA True NVIDIA GeForce RTX 5060 Ti
+PS C:\Users\Administrator>
