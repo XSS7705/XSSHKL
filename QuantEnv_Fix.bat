@@ -17,15 +17,18 @@ set "WHEELS=%BUNDLE%\wheels"
 set "M1=https://pypi.tuna.tsinghua.edu.cn/simple"
 set "M2=https://mirrors.aliyun.com/pypi/simple"
 set "M3=https://mirrors.ustc.edu.cn/pypi/simple"
+set "ISET=HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings"
+set "PROXYFIX=0"
 
 echo ============================================================
 echo  QuantEnv Fix    target = %TARGET%
 echo ============================================================
 echo.
-echo [0/5] Proxy env vars found in this window (will be cleared):
+echo [0/5] Cleaning proxy environment variables ...
 set | findstr /i "proxy" || echo   none
 for %%v in (HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy) do set "%%v="
-echo   cleared - uv will no longer use a dead proxy (os error 10061 / tunnel error)
+set "NO_PROXY=*"
+set "no_proxy=*"
 
 if /i "%~1"=="build" goto :build
 
@@ -37,21 +40,29 @@ if not exist "%REQ%" (echo   [ERROR] missing %REQ% & goto :fail)
 echo   ok
 
 echo.
-echo [2/5] Windows system proxy (WinINET) ...
-set "SYS=0"
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable 2>nul | findstr /i "0x1" >nul
-if not errorlevel 1 set "SYS=1"
-if "%SYS%"=="1" (
-  echo   [WARN] enabled. Settings ^> Network ^> Proxy : turn it OFF if that proxy is not running.
-  reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyServer 2>nul
-) else (
-  echo   off
-)
-
-echo.
-echo [3/5] Direct connectivity test (proxy bypassed) ...
+echo [2/5] Direct connectivity test (proxy bypassed) ...
 "%PY%" -c "import urllib.request as u;u.build_opener(u.ProxyHandler({})).open('https://pypi.tuna.tsinghua.edu.cn/simple/',timeout=10);print('NET_OK')" 2>nul
 if errorlevel 1 (set "NET=0" & echo   NET_FAIL - no direct internet on this machine) else (set "NET=1")
+
+echo.
+echo [3/5] Windows system proxy (registry, read by uv/reqwest) ...
+if "%NET%"=="0" (
+  echo   skipped - no direct internet, existing proxy settings kept
+  goto :after_sysproxy
+)
+set "SYS=0"
+for /f "tokens=3" %%a in ('reg query "%ISET%" /v ProxyEnable 2^>nul ^| findstr /i "ProxyEnable"') do set "SYS=%%a"
+if /i not "%SYS%"=="0x1" (
+  echo   off
+  goto :after_sysproxy
+)
+set "SYSSRV="
+for /f "tokens=3*" %%a in ('reg query "%ISET%" /v ProxyServer 2^>nul ^| findstr /i "ProxyServer"') do set "SYSSRV=%%a %%b"
+reg add "%ISET%" /v ProxyEnable /t REG_DWORD /d 0 /f >nul
+set "PROXYFIX=1"
+echo   was ON  %SYSSRV%
+echo   now OFF  -^> dead proxy no longer breaks uv (os error 10061 / tunnel error)
+:after_sysproxy
 
 echo.
 echo [4/5] Installing requirements ...
@@ -75,6 +86,7 @@ echo [5/5] Verify ...
 "%UV%" pip check --python "%PY%"
 "%PY%" -c "import sys;print('  python',sys.version.split()[0],'ok')"
 echo.
+if "%PROXYFIX%"=="1" echo  NOTE: system proxy was switched OFF. Re-enable it in Settings if you start that proxy app again.
 echo ============================================================
 echo  DONE
 echo ============================================================
@@ -88,7 +100,7 @@ echo     1. On an ONLINE Windows PC with Python 3.12, copy F:\QuantBundle there
 echo     2. Run:  QuantEnv_Fix.bat build
 echo     3. Copy F:\QuantBundle\wheels back to this machine, run this script again
 echo   Note: if this machine only reaches the internet through a WORKING proxy,
-echo         set HTTP_PROXY/HTTPS_PROXY to it and edit this script to skip step 0.
+echo         start that proxy app first, then run this script again.
 goto :fail
 
 :build
